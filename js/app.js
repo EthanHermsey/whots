@@ -71,9 +71,36 @@ function animate() {
 			velocity.y = Math.max( 0, velocity.y );
 			canJump = true;
 		}
-		controls.moveRight( - velocity.x * delta );
-		controls.moveForward( - velocity.z * delta );
-		controls.getObject().position.y += ( velocity.y * delta ); // new behavior
+
+let collisionRange = 10; //if the mesh gets too close, the camera clips though the object...
+
+    let tempVelocity = velocity.clone().multiplyScalar(delta) //get the delta velocity
+    let nextPosition = controls.getObject().position.clone().add(tempVelocity);
+    let tooClose = false;
+    let playerPosition = controls.getObject().position;
+
+    for (let i = 0; i < objects.length; i++) {
+      let object = objects[i];
+      let objectDirection = object.position.clone().sub(playerPosition).normalize();
+      raycaster.set(nextPosition, objectDirection) //set the position and direction
+      let directionIntersects = raycaster.intersectObject(object);
+      if (directionIntersects.length > 0 && directionIntersects[0].distance < collisionRange) {
+        //too close, stop player from moving in that direction...
+        tooClose = true;
+        break;
+      }
+    }
+
+
+
+
+    if (tooClose == false) {
+      controls.moveRight(-velocity.x * delta);
+      controls.moveForward(-velocity.z * delta);
+      controls.getObject().position.y += (velocity.y * delta); // new behavior
+    }
+		
+		
 		if ( controls.getObject().position.y < 10 ) {
 			velocity.y = 0;
 			controls.getObject().position.y = 10;
@@ -203,12 +230,6 @@ function createMeshes(){
 	cube.castShadow = true;
 	scene.add( cube );
 	objects.push( cube );
-
-	var cubeGeometry = new THREE.CubeGeometry(50,50,50,1,1,1);
-	var wireMaterial = new THREE.MeshBasicMaterial( { color: 0xff0000, wireframe:true } );
-	MovingCube = new THREE.Mesh( cubeGeometry, wireMaterial );
-	MovingCube.position.set(50, 25, 50);
-	scene.add( MovingCube );
 
 }
 
