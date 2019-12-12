@@ -6,10 +6,14 @@ let fpsContainer
 let stats = null;
 let camera = null;
 let MeshBox = null;
+//you don't have to set null, it's undefined by default.
+let ground;
+
 let renderer = null;
 let scene = null;
 let controls = null;
-let raycaster = null;
+//moved this up here, you can do it with a single caster.
+let raycaster = new THREE.Raycaster();
 let objects = [];
 let moveForward = false;
 let moveBackward = false;
@@ -27,6 +31,8 @@ function init() {
   fpsContainer = document.querySelector('#fps');
   mainContainer = document.querySelector('#webgl-secne');
   scene = new THREE.Scene();
+  //add a down vector for easy access for ground raycasting
+  scene.down = scene.up.clone().multiplyScalar(-1);
   scene.background = new THREE.Color(0xEEEEEE); // http://www.colorpicker.com/
   scene.fog = new THREE.Fog(0xffffff, 0, 750);
 
@@ -38,10 +44,17 @@ function init() {
   createLights();
   createMeshes();
   createRenderer();
+
+  // I did not know about setAnimationLoop, it is nice. This function replaces the 
+  // requestAnimationFrame api, it starts automatically, you shouldn't call that function in
+  // the animate function again.
   renderer.setAnimationLoop(() => {
-    update();
-    render();
-    animate();
+    
+    animate(); //move the character
+    
+    update(); //move that MeshBox (what does it do!?) to the new camera position.
+
+    render(); // you should only render the scene once, at the end.
   });
 }
 
@@ -56,39 +69,99 @@ function update() {
 
 function animate() {
 
-  requestAnimationFrame(animate);
   if (controls.isLocked === true) {
+    
+        
 
-    raycaster.ray.origin.copy( controls.getObject().position );
-    raycaster.ray.origin.y -= 10;
-    var intersections = raycaster.intersectObjects( objects );
-    var onObject = intersections.length > 0;
     var time = performance.now();
     var delta = ( time - prevTime ) / 1000;
+    
     velocity.x -= velocity.x * 10.0 * delta;
     velocity.z -= velocity.z * 10.0 * delta;
     velocity.y -= 9.8 * 100.0 * delta; // 100.0 = mass
-    direction.z = Number( moveForward ) - Number( moveBackward );
+    
+    direction.z = Number( moveBackward ) - Number( moveForward );
     direction.x = Number( moveRight ) - Number( moveLeft );
     direction.normalize(); // this ensures consistent movements in all directions
-    if ( moveForward || moveBackward ) velocity.z -= direction.z * 400.0 * delta;
-    if ( moveLeft || moveRight ) velocity.x -= direction.x * 400.0 * delta;
-    //if ( onObject === true ) {
-      //velocity.y = Math.max( 0, velocity.y );
-      //canJump = true;
-    //}
-    controls.moveRight( - velocity.x * delta );
-    controls.moveForward( - velocity.z * delta );
-    controls.getObject().position.y += ( velocity.y * delta ); // new behavior
-    if ( controls.getObject().position.y < 10 ) {
-     velocity.y = 0;
-      controls.getObject().position.y = 10;
-      canJump = true;
+
+
+
+    // Direction raycast
+    // vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+
+    // if player is moving
+    if (direction.length() > 0){
+      
+      // the vec3 direction is in local space (actual left-right front/backwrds of the camera), 
+      // this rotates it to a global space direction vector, for raycasting.
+      let rotatedDirection = direction.clone();
+      rotatedDirection.applyEuler( controls.getObject().rotation );
+      
+      // set a ray from the camera position in the direction that you are walking
+      raycaster.set( controls.getObject().position, rotatedDirection);      
+      let directionCast = raycaster.intersectObjects( objects );
+      
+      // decide if you want to add the movement direction to the velocity
+      if (directionCast.length > 0 && directionCast[0].distance < 10){
+        direction.multiplyScalar(0);
+        velocity.x *= 0;
+        velocity.z *= 0;
+      }
+      
     }
+    
+
+
+    // add to the velocity
+    velocity.z -= direction.z * 400.0 * delta;      
+    velocity.x += direction.x * 400.0 * delta;
+
+    // add to controller
+    controls.moveRight( velocity.x * delta );
+    controls.moveForward( velocity.z * delta );  
+
+    controls.getObject().position.y += velocity.y * delta; 
+
+    
+
+
+    // Ground casting
+    // vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv    
+    raycaster.set( controls.getObject().position, scene.down);
+
+    let intersects = raycaster.intersectObjects( objects.concat( [ground] ));
+      
+    if (intersects.length == 0 || intersects[0].distance < 10){
+      velocity.y = Math.max(0, velocity.y);
+      
+      // in case of no intersection, the camera is under the ground, so set the y to 10;
+      // if there is an intersection with the objects or the ground, set its height to that point + 10;
+      // you can also write this as;
+      // let y = (intersects.length > 0) ? intersects[0].point.y + 10 : 10;
+      let y = 10;
+      if (intersects.length > 0) y = intersects[0].point.y + 10;
+
+      controls.getObject().position.y = y;
+      canJump = true; 
+    }
+    
     prevTime = time;
 
-    //let originPoint = MeshBox.position.clone();
-      
+
+
+    // You can do it like this too. Looping over all the objects, then raycasting all their vertices.
+    // I'm still not sure why that meshBox is there ;p 
+
+    // MeshBox.geometry.vertices doesn't exist anyway because it's a BufferGeometry. 
+    // BufferGeometry hold their vertices in an 1d array in the MeshBox.geometry.attributes.position.array.
+    // That is faster to render and a good use for the object boxes.
+    
+    // If you set the meshbox to be a normal geometry, you can then for example use it like this;
+    // For every object copy the object position (and rotation) to the meshbox. Then raycast each vertex of the box.
+
+    
+    
+    //let originPoint = MeshBox.position.clone();      
     //for (let vertexIndex = 0; vertexIndex < MeshBox.geometry.vertices.length; vertexIndex++)
     //{		
       //let localVertex = MeshBox.geometry.vertices[vertexIndex].clone();
@@ -101,8 +174,7 @@ function animate() {
         //appendText(" Hit ");
     //}
 
-  }
-  renderer.render( scene, camera );
+  }  
 }
 
 
@@ -192,10 +264,7 @@ function createControls() {
   };
   document.addEventListener('keydown', onKeyDown, false);
   document.addEventListener('keyup', onKeyUp, false);
-
-  raycaster = new THREE.Raycaster(new THREE.Vector3(), new THREE.Vector3(0, -1, 0), 0, 5);
-  //raycaster2 = new THREE.Raycaster( new THREE.Vector3(), new THREE.Vector3( 0, 0 , -1 ),0,2);
-  //raycaster2 = new THREE.Raycaster( new THREE.Vector2(), camera ); 	
+  
 }
 
 // Light objects
@@ -208,28 +277,41 @@ function createMeshes() {
 
   const geo = new THREE.PlaneBufferGeometry(1000, 1000);
   const mat = new THREE.MeshBasicMaterial({color: 0x98FB98});
-  const plane = new THREE.Mesh(geo, mat);
-  plane.rotateX(-Math.PI / 2);
-  plane.receiveShadow = true;
-  scene.add(plane);
+  ground = new THREE.Mesh(geo, mat);
+  ground.rotateX(-Math.PI / 2);
+  ground.receiveShadow = true;
+  scene.add(ground);
 
-  const geometry = new THREE.BoxBufferGeometry(20, 20, 20, 1, 1, 1);
-  const material = new THREE.MeshBasicMaterial({color: 0xffffff});
-  const cube = new THREE.Mesh(geometry, material);
-  cube.position.set( 50, 10, 15 );
-  scene.add(cube);
-  objects.push(cube);
+  const boxSize = 20;
+  const geometry = new THREE.BoxBufferGeometry(boxSize, boxSize, boxSize, 1, 1, 1);
+  geometry.computeBoundingBox();
+  const material = new THREE.MeshBasicMaterial({color: 0xff0022});
+
+  //more cubes
+  for (let i = 0; i < 50; i++){
+    const cube = new THREE.Mesh(geometry, material);
+    cube.position.set( 
+      40 + (Math.random() * 100) * Math.sign( -1 + Math.random() * 2 ),
+      (boxSize / 2) + Math.floor(Math.random() * 6) * boxSize,
+      40 + (Math.random() * 100) * Math.sign( -1 + Math.random() * 2 )
+    );
+    scene.add(cube);
+    objects.push(cube);
+  }
+  
 
   const MeshBoxGeo = new THREE.BoxBufferGeometry(1, 2.5, 1,1 ,1 ,1);
-  const MeshBoXMat = new THREE.MeshBasicMaterial({color:0xFFFFFF});
+  const MeshBoXMat = new THREE.MeshBasicMaterial({color:0xFF0000});
   MeshBox = new THREE.Mesh(MeshBoxGeo, MeshBoXMat);
-  scene.add(MeshBox);
+  //scene.add(MeshBox);
+  //what is this?! lol.
 
 }
 
 // Renderer object and features
 function createRenderer() {
-  renderer = new THREE.WebGLRenderer();
+  //added antialias
+  renderer = new THREE.WebGLRenderer({antialias: true});
   renderer.setSize(mainContainer.clientWidth, mainContainer.clientHeight);
   renderer.setPixelRatio(window.devicePixelRatio);
   //renderer.setClearColor(0xEEEEEE);
