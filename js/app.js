@@ -5,6 +5,7 @@ let mainContainer = null;
 let fpsContainer
 let stats = null;
 let camera = null;
+let MeshBox = null;
 let renderer = null;
 let scene = null;
 let controls = null;
@@ -47,91 +48,71 @@ function init() {
 // Animations
 function update() {
 
-
+  MeshBox.position.x = camera.position.x;
+  MeshBox.position.y = camera.position.y;
+  MeshBox.position.z = camera.position.z;
 }
+
 
 function animate() {
 
   requestAnimationFrame(animate);
   if (controls.isLocked === true) {
-    //raycaster
-    raycaster.ray.origin.copy(controls.getObject().position);
-    const intersections = raycaster.intersectObjects(objects);
-    const onObject = intersections.length > 0;
-    //raycaster2
-    //raycaster2.ray.origin.copy( controls.getObject().position );		
-    //const intersections2 = raycaster2.intersectObjects( objects );
-    //const saliaObject = intersections2.length > 0;
-    //console.log(intersections2.length);
 
-    const time = performance.now();
-    const delta = (time - prevTime) / 1000;
+    raycaster.ray.origin.copy( controls.getObject().position );
+    raycaster.ray.origin.y -= 10;
+    var intersections = raycaster.intersectObjects( objects );
+    var onObject = intersections.length > 0;
+    var time = performance.now();
+    var delta = ( time - prevTime ) / 1000;
     velocity.x -= velocity.x * 10.0 * delta;
     velocity.z -= velocity.z * 10.0 * delta;
     velocity.y -= 9.8 * 100.0 * delta; // 100.0 = mass
-    direction.z = Number(moveForward) - Number(moveBackward);
-    direction.x = Number(moveRight) - Number(moveLeft);
+    direction.z = Number( moveForward ) - Number( moveBackward );
+    direction.x = Number( moveRight ) - Number( moveLeft );
     direction.normalize(); // this ensures consistent movements in all directions
-    if (moveForward || moveBackward) velocity.z -= direction.z * 400.0 * delta;
-    if (moveLeft || moveRight) velocity.x -= direction.x * 400.0 * delta;
-    if (onObject === true) {
-      velocity.y = Math.max(0, velocity.y);
-      canJump = true;
-    }
-    //if ( saliaObject === true ) {
-    //velocity.z = Math.max( 0, velocity.z );
-
-    //canJump = true;
+    if ( moveForward || moveBackward ) velocity.z -= direction.z * 400.0 * delta;
+    if ( moveLeft || moveRight ) velocity.x -= direction.x * 400.0 * delta;
+    //if ( onObject === true ) {
+      //velocity.y = Math.max( 0, velocity.y );
+      //canJump = true;
     //}
-
-    //UPDATE
-
-    let collisionRange = 10; //if the mesh gets too close, the camera clips though the object...
-
-    let tempVelocity = velocity.clone().multiplyScalar(delta) //get the delta velocity
-    let nextPosition = controls.getObject().position.clone().add(tempVelocity);
-    let tooClose = false;
-    let playerPosition = controls.getObject().position;
-
-    for (let i = 0; i < objects.length; i++) {
-      let object = objects[i];
-      let objectDirection = object.position.clone().sub(playerPosition).normalize();
-      raycaster.set(nextPosition, objectDirection) //set the position and direction
-      let directionIntersects = raycaster.intersectObject(object);
-      if (directionIntersects.length > 0 && directionIntersects[0].distance < collisionRange) {
-        //too close, stop player from moving in that direction...
-        tooClose = true;
-        break;
-      }
-    }
-
-
-
-
-    if (tooClose == false) {
-      controls.moveRight(-velocity.x * delta);
-      controls.moveForward(-velocity.z * delta);
-      controls.getObject().position.y += (velocity.y * delta); // new behavior
-    }
-
-    if (controls.getObject().position.y < 10) {
-      velocity.y = 0;
+    controls.moveRight( - velocity.x * delta );
+    controls.moveForward( - velocity.z * delta );
+    controls.getObject().position.y += ( velocity.y * delta ); // new behavior
+    if ( controls.getObject().position.y < 10 ) {
+     velocity.y = 0;
       controls.getObject().position.y = 10;
       canJump = true;
     }
-
     prevTime = time;
+
+    //let originPoint = MeshBox.position.clone();
+      
+    //for (let vertexIndex = 0; vertexIndex < MeshBox.geometry.vertices.length; vertexIndex++)
+    //{		
+      //let localVertex = MeshBox.geometry.vertices[vertexIndex].clone();
+      //let globalVertex = localVertex.applyMatrix4( MeshBox.matrix );
+      //let directionVector = globalVertex.sub( MeshBox.position );
+      
+      //let ray = new THREE.Raycaster( originPoint, directionVector.clone().normalize() );
+      //let collisionResults = ray.intersectObjects( objects );
+      //if ( collisionResults.length > 0 && collisionResults[0].distance < directionVector.length() ) 
+        //appendText(" Hit ");
+    //}
+
   }
-  renderer.render(scene, camera);
+  renderer.render( scene, camera );
 }
 
 
 // Statically rendered content
 function render() {
-  stats.begin();
 
+  stats.begin();
   renderer.render(scene, camera);
   stats.end();
+
 }
 
 // FPS counter
@@ -143,11 +124,8 @@ function createStats() {
 
 // Camera object
 function createCamera() {
-  const fov = 75;
   const aspect = mainContainer.clientWidth / mainContainer.clientHeight;
-  const near = 0.1;
-  const far = 500; // meters
-  camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
+  camera = new THREE.PerspectiveCamera(75, aspect, 0.1 , 500);
   camera.position.set(0, 10, 0);
 }
 
@@ -227,28 +205,25 @@ function createLights() {
 
 // Meshes and other visible objects
 function createMeshes() {
+
   const geo = new THREE.PlaneBufferGeometry(1000, 1000);
-  const mat = new THREE.MeshBasicMaterial({
-    color: 0x98FB98
-  });
+  const mat = new THREE.MeshBasicMaterial({color: 0x98FB98});
   const plane = new THREE.Mesh(geo, mat);
   plane.rotateX(-Math.PI / 2);
   plane.receiveShadow = true;
   scene.add(plane);
 
-  const geometry = new THREE.BoxBufferGeometry(20, 20, 20);
-  const material = new THREE.MeshBasicMaterial({
-    color: 0xffffff,
-    side: THREE.DoubleSide
-  });
+  const geometry = new THREE.BoxBufferGeometry(20, 20, 20, 1, 1, 1);
+  const material = new THREE.MeshBasicMaterial({color: 0xffffff});
   const cube = new THREE.Mesh(geometry, material);
-  cube.position.x = 15;
-  cube.position.z = 10;
-  cube.position.y = 15;
-  cube.receiveShadow = true;
-  cube.castShadow = true;
+  cube.position.set( 50, 10, 15 );
   scene.add(cube);
   objects.push(cube);
+
+  const MeshBoxGeo = new THREE.BoxBufferGeometry(1, 2.5, 1,1 ,1 ,1);
+  const MeshBoXMat = new THREE.MeshBasicMaterial({color:0xFFFFFF});
+  MeshBox = new THREE.Mesh(MeshBoxGeo, MeshBoXMat);
+  scene.add(MeshBox);
 
 }
 
